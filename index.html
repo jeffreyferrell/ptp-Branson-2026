@@ -7888,6 +7888,9 @@ days.forEach(([date, dow]) => {
 renderRoomView(defaultDate);
 daySelect.addEventListener('change', () => { if (daySelect.value) renderRoomView(daySelect.value); });
 
+// Session lookup — avoids passing JSON through onclick attributes
+const SESSION_MAP = {};
+
 // Monitor schedule
 function renderMonitorSchedule(name) {
   const sessions = DATA.filter(r => r.Monitor_Name === name);
@@ -7913,6 +7916,7 @@ function renderMonitorSchedule(name) {
       const prevCount = submitted[key];
       const isSubmitted = prevCount !== undefined;
       const safeKey = key.replace(/[|: ]/g, '_');
+      SESSION_MAP[safeKey] = s;
       const cardClass = isShared ? 'shared' : (isMulti ? 'multi' : '');
       html += `
         <div class="session-card ${cardClass}" id="card-${safeKey}">
@@ -7932,7 +7936,8 @@ function renderMonitorSchedule(name) {
               id="input-${safeKey}" />
             <button class="${isSubmitted ? 'btn-submitted' : 'btn-submit'}"
               id="btn-${safeKey}"
-              onclick="submitAttendance(${JSON.stringify(s)})">
+              data-key="${safeKey}"
+              onclick="submitAttendance(this)">
               ${isSubmitted ? '✓ Update' : 'Log Attendance'}
             </button>
           </div>
@@ -7989,11 +7994,13 @@ function renderRoomView(date) {
 }
 
 // Attendance - fixed to use no-cors properly
-function submitAttendance(session) {
+function submitAttendance(btnEl) {
+  const safeKey = btnEl.getAttribute('data-key');
+  const session = SESSION_MAP[safeKey];
+  if (!session) { showToast('Session not found', true); return; }
   const key = sessionKey(session);
-  const safeKey = key.replace(/[|: ]/g, '_');
   const input = document.getElementById(`input-${safeKey}`);
-  const btn = document.getElementById(`btn-${safeKey}`);
+  const btn = btnEl;
   const count = input.value.trim();
 
   if (count === '' || isNaN(count) || parseInt(count) < 0) {
