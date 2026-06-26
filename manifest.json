@@ -1,0 +1,18 @@
+{
+  "name": "PTP 2026 Monitor Schedule",
+  "short_name": "PTP 2026",
+  "description": "Room Monitor Schedule for PTP 2026 Branson",
+  "start_url": "/ptp-Branson-2026/",
+  "display": "standalone",
+  "background_color": "#f0f4f8",
+  "theme_color": "#1a3a5c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
