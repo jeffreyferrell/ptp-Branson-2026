@@ -111,7 +111,6 @@ select:focus{outline:none;border-color:#1a3a5c}
 <div class="toast" id="toast"></div>
 
 <script>
-// Unregister any existing service worker
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(function(regs){
     regs.forEach(function(r){r.unregister()});
@@ -138,7 +137,6 @@ function switchTab(t){
   document.getElementById('tab-'+t).classList.add('active');
   document.getElementById('view-'+t).classList.add('active');
 }
-
 function showToast(msg,isError){
   var t=document.getElementById('toast');
   t.textContent=msg;
@@ -146,74 +144,87 @@ function showToast(msg,isError){
   setTimeout(function(){t.className='toast'+(isError?' error':'')},3000);
 }
 
-// Process raw sheet data into app format
-function processSheetData(sessions){
-  var processed=[];
-  var roomData=[];
-  var timeRoomMap={};
+function formatTime(dtStr){
+  var dt=new Date(dtStr.replace(' ','T'));
+  var h=dt.getHours(),m=dt.getMinutes();
+  var ampm=h>=12?'PM':'AM';
+  var h12=h%12||12;
+  return(h12<10?'0':'')+h12+':'+(m<10?'0':'')+m+' '+ampm;
+}
 
-  // First pass - group by time+room to detect multi-speaker
+function formatDate(dtStr){
+  return dtStr.substring(0,10);
+}
+
+function getDow(dtStr){
+  var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return days[new Date(dtStr.replace(' ','T')).getDay()];
+}
+
+function processSheetData(sessions){
+  // Group by date+startTime+room — use first row's monitor for that slot
+  var slotMap={};
   sessions.forEach(function(s){
     if(!s.room||!s.start)return;
+    var date=formatDate(s.start);
+    var startTime=formatTime(s.start);
+    var endTime=formatTime(s.end);
+    var dow=getDow(s.start);
     var dt=new Date(s.start.replace(' ','T'));
-    var date=s.start.substring(0,10);
-    var hour=dt.getHours(),min=dt.getMinutes();
-    var ampm=hour>=12?'PM':'AM';
-    var h12=hour%12||12;
-    var startTime=(h12<10?'0':'')+h12+':'+(min<10?'0':'')+min+' '+ampm;
     var edt=new Date(s.end.replace(' ','T'));
-    var eh=edt.getHours(),em=edt.getMinutes();
-    var eampm=eh>=12?'PM':'AM';
-    var eh12=eh%12||12;
-    var endTime=(eh12<10?'0':'')+eh12+':'+(em<10?'0':'')+em+' '+eampm;
     var dur=Math.round((edt-dt)/60000);
-    var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    var dow=days[dt.getDay()];
-    var key=date+'|'+startTime+'|'+s.room;
-    if(!timeRoomMap[key])timeRoomMap[key]={speakers:[],monitor:s.monitor,track:s.track,date:date,dow:dow,startTime:startTime,endTime:endTime,dur:dur,room:s.room,row:s.row};
-    if(s.speaker)timeRoomMap[key].speakers.push(s.speaker);
+    var key=date+'||'+startTime+'||'+s.room;
+    if(!slotMap[key]){
+      slotMap[key]={
+        date:date,dow:dow,startTime:startTime,endTime:endTime,
+        room:s.room,monitor:s.monitor,track:s.track,dur:dur,
+        speakers:[],row:s.row
+      };
+    }
+    if(s.speaker&&slotMap[key].speakers.indexOf(s.speaker)<0)
+      slotMap[key].speakers.push(s.speaker);
   });
 
-  // Second pass - build records
-  Object.keys(timeRoomMap).forEach(function(key){
-    var d=timeRoomMap[key];
-    var isMulti=d.speakers.length>1;
-    var speaker=isMulti?'':( d.speakers[0]||'');
-    var monitor=d.monitor||'';
-    var records=[];
+  var processed=[];
+  var roomData=[];
 
-    // Handle dual monitors (slash separated)
-    if(monitor.indexOf(' / ')>=0){
+  Object.values(slotMap).forEach(function(slot){
+    var monitor=slot.monitor||'';
+    var isMulti=slot.speakers.length>1;
+    var speaker=isMulti?'':( slot.speakers[0]||'');
+    var isDual=monitor.indexOf(' / ')>=0;
+
+    // Room view always shows full monitor name
+    var roomRec={
+      Monitor_Name:monitor,Date:slot.date,Day_of_Week:slot.dow,
+      Start_Time:slot.startTime,End_Time:slot.endTime,Duration:String(slot.dur),
+      Room:slot.room,Track:slot.track||'',Speaker:speaker,
+      Multi_Speaker:isMulti?'Yes':'No',Is_Shared:'No',row:slot.row
+    };
+    roomData.push(roomRec);
+
+    if(isDual){
+      // Split dual monitors into individual records
       var names=monitor.split(' / ');
       names.forEach(function(name){
-        records.push({
-          Monitor_Name:name.trim(),Date:d.date,Day_of_Week:d.dow,
-          Start_Time:d.startTime,End_Time:d.endTime,Duration:String(d.dur),
-          Room:d.room,Track:d.track||'',Speaker:speaker,
-          Multi_Speaker:isMulti?'Yes':'No',Is_Shared:'Yes',row:d.row
+        processed.push({
+          Monitor_Name:name.trim(),Date:slot.date,Day_of_Week:slot.dow,
+          Start_Time:slot.startTime,End_Time:slot.endTime,Duration:String(slot.dur),
+          Room:slot.room,Track:slot.track||'',Speaker:speaker,
+          Multi_Speaker:isMulti?'Yes':'No',Is_Shared:'Yes',row:slot.row
         });
       });
-      // Also add original for room view
-      roomData.push({
-        Monitor_Name:monitor,Date:d.date,Day_of_Week:d.dow,
-        Start_Time:d.startTime,End_Time:d.endTime,Duration:String(d.dur),
-        Room:d.room,Track:d.track||'',Speaker:speaker,
-        Multi_Speaker:isMulti?'Yes':'No',Is_Shared:'No',row:d.row
-      });
     }else{
-      var rec={
-        Monitor_Name:monitor,Date:d.date,Day_of_Week:d.dow,
-        Start_Time:d.startTime,End_Time:d.endTime,Duration:String(d.dur),
-        Room:d.room,Track:d.track||'',Speaker:speaker,
-        Multi_Speaker:isMulti?'Yes':'No',Is_Shared:'No',row:d.row
-      };
-      records.push(rec);
-      roomData.push(rec);
+      processed.push({
+        Monitor_Name:monitor,Date:slot.date,Day_of_Week:slot.dow,
+        Start_Time:slot.startTime,End_Time:slot.endTime,Duration:String(slot.dur),
+        Room:slot.room,Track:slot.track||'',Speaker:speaker,
+        Multi_Speaker:isMulti?'Yes':'No',Is_Shared:'No',row:slot.row
+      });
     }
-    processed=processed.concat(records);
   });
 
-  // Add EHA data
+  // Add EHA
   EHA_DATA.forEach(function(e){
     processed.push(e);
     roomData.push(e);
@@ -222,7 +233,12 @@ function processSheetData(sessions){
   return{data:processed,roomData:roomData};
 }
 
-// Load data from Google Sheets
+function buildMonitorList(data){
+  var set={};
+  data.forEach(function(r){set[r.Monitor_Name]=true});
+  return Object.keys(set).sort();
+}
+
 function loadData(){
   fetch(API_URL+'?action=getSessions')
   .then(function(r){return r.json()})
@@ -231,21 +247,16 @@ function loadData(){
     DATA=result.data;
     ROOM_DATA=result.roomData;
 
-    // Load monitors
-    return fetch(API_URL+'?action=getMonitors');
-  })
-  .then(function(r){return r.json()})
-  .then(function(monitors){
-    // Populate monitor dropdown
+    // Build monitor list from processed data
+    var monitors=buildMonitorList(DATA);
     var sel=document.getElementById('monitorSelect');
-    // Clear existing options except first
     while(sel.options.length>1)sel.remove(1);
     monitors.forEach(function(m){
       var o=document.createElement('option');
       o.value=m;o.textContent=m;sel.appendChild(o);
     });
 
-    // Populate day dropdown
+    // Day dropdown
     var EVENT_DATES=[...new Set(DATA.map(function(r){return r.Date}))].sort();
     var FIRST_DATE=EVENT_DATES[0];
     function getDefaultDate(){
@@ -278,20 +289,20 @@ function loadData(){
   });
 }
 
-// Load data on startup
 loadData();
 
-var monitorSelect=document.getElementById('monitorSelect');
-monitorSelect.addEventListener('change',function(){
-  if(monitorSelect.value)renderMonitorSchedule(monitorSelect.value);
+document.getElementById('monitorSelect').addEventListener('change',function(){
+  var v=this.value;
+  if(v)renderMonitorSchedule(v);
   else{
     document.getElementById('monitor-content').innerHTML='<div class="empty-state"><div class="icon">&#128203;</div><p>Select your name above</p></div>';
     document.getElementById('monitor-summary').style.display='none';
   }
 });
 
-var daySelect=document.getElementById('daySelect');
-daySelect.addEventListener('change',function(){if(daySelect.value)renderRoomView(daySelect.value)});
+document.getElementById('daySelect').addEventListener('change',function(){
+  if(this.value)renderRoomView(this.value);
+});
 
 function renderMonitorSchedule(name){
   var sessions=DATA.filter(function(r){return r.Monitor_Name===name});
@@ -389,10 +400,8 @@ function setPPT(btnEl){
   var session=SESSION_MAP[safeKey];
   if(!session)return;
   markSubmittedPPT(sessionKey(session),val);
-  var yesBtn=document.getElementById('ppt-yes-'+safeKey);
-  var noBtn=document.getElementById('ppt-no-'+safeKey);
-  if(yesBtn)yesBtn.className='btn-ppt'+(val==='Yes'?' selected-yes':'');
-  if(noBtn)noBtn.className='btn-ppt'+(val==='No'?' selected-no':'');
+  document.getElementById('ppt-yes-'+safeKey).className='btn-ppt'+(val==='Yes'?' selected-yes':'');
+  document.getElementById('ppt-no-'+safeKey).className='btn-ppt'+(val==='No'?' selected-no':'');
 }
 
 function submitAttendance(btnEl){
