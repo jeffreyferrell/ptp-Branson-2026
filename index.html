@@ -145,8 +145,10 @@ function showToast(msg,isError){
 }
 
 function formatTime(dtStr){
-  var dt=new Date(dtStr.replace(' ','T'));
-  var h=dt.getHours(),m=dt.getMinutes();
+  // Parse directly from string - avoids timezone conversion issues
+  var timePart=dtStr.split(' ')[1]||'00:00';
+  var tp=timePart.split(':');
+  var h=parseInt(tp[0]),m=parseInt(tp[1]||0);
   var ampm=h>=12?'PM':'AM';
   var h12=h%12||12;
   return(h12<10?'0':'')+h12+':'+(m<10?'0':'')+m+' '+ampm;
@@ -157,8 +159,10 @@ function formatDate(dtStr){
 }
 
 function getDow(dtStr){
+  var p=dtStr.split(' ')[0].split('-');
+  var dt=new Date(Date.UTC(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])));
   var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  return days[new Date(dtStr.replace(' ','T')).getDay()];
+  return days[dt.getUTCDay()];
 }
 
 function processSheetData(sessions){
@@ -170,9 +174,13 @@ function processSheetData(sessions){
     var startTime=formatTime(s.start);
     var endTime=formatTime(s.end);
     var dow=getDow(s.start);
-    var dt=new Date(s.start.replace(' ','T'));
-    var edt=new Date(s.end.replace(' ','T'));
-    var dur=Math.round((edt-dt)/60000);
+    // Calculate duration from string to avoid timezone issues
+    var startParts=s.start.split(' ')[1].split(':');
+    var endParts=s.end.split(' ')[1].split(':');
+    var startMins=parseInt(startParts[0])*60+parseInt(startParts[1]||0);
+    var endMins=parseInt(endParts[0])*60+parseInt(endParts[1]||0);
+    var dur=endMins-startMins;
+    if(dur<0)dur+=1440;
     var key=date+'||'+startTime+'||'+s.room;
     if(!slotMap[key]){
       slotMap[key]={
