@@ -141,14 +141,16 @@ Promise.all([
     }
   });
 
-  SESSIONS=Object.values(seen).sort(function(a,b){
+  SESSIONS=Object.values(seen).filter(function(s){
+    return s.monitor&&s.monitor.trim()!=='';
+  }).sort(function(a,b){
     if(a.date!==b.date)return a.date.localeCompare(b.date);
     return timeToMins(a.startTime)-timeToMins(b.startTime);
   });
 
   // Populate filters
   var mf=document.getElementById('monitorFilter');
-  MONITORS.forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;mf.appendChild(o)});
+  MONITORS.filter(function(m){return m&&m.trim()!==''}).forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;mf.appendChild(o)});
   var rf=document.getElementById('roomFilter');
   var rooms=[...new Set(SESSIONS.map(function(s){return s.room}))].sort();
   rooms.forEach(function(r){var o=document.createElement('option');o.value=r;o.textContent=r;rf.appendChild(o)});
@@ -202,7 +204,7 @@ function render(){
       if(s.speaker)html+='<div class="session-speaker">'+s.speaker+'</div>';
       html+='<div class="monitor-row"><span class="monitor-label">Monitor:</span>';
       html+='<select class="monitor-select'+(isChanged?' changed':'')+'" data-row="'+s.row+'" onchange="handleChange(this)">';
-      MONITORS.forEach(function(m){html+='<option value="'+m+'"'+(m===cur?' selected':'')+'>'+m+'</option>'});
+      MONITORS.filter(function(m){return m&&m.trim()!==''}).forEach(function(m){html+='<option value="'+m+'"'+(m===cur?' selected':'')+'>'+m+'</option>'});
       html+='</select>';
       if(isChanged)html+='<span class="changed-badge" id="badge-'+s.row+'">Changed</span>';
       html+='</div></div>';
