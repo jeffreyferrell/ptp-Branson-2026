@@ -138,6 +138,10 @@ Promise.all([
         room:s.room,monitor:s.monitor,speaker:s.speaker,
         track:s.track,row:s.row
       };
+    }else{
+      // Update monitor if this row has one and the existing doesn't
+      if(s.monitor&&s.monitor.trim()!==''&&(!seen[key].monitor||seen[key].monitor.trim()===''))
+        seen[key].monitor=s.monitor;
     }
   });
 
@@ -148,9 +152,11 @@ Promise.all([
     return timeToMins(a.startTime)-timeToMins(b.startTime);
   });
 
-  // Populate filters
+  // Populate filters - build monitor list from actual session data for exact match
   var mf=document.getElementById('monitorFilter');
-  MONITORS.filter(function(m){return m&&m.trim()!==''}).forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;mf.appendChild(o)});
+  var monitorSet={};
+  SESSIONS.forEach(function(s){if(s.monitor&&s.monitor.trim()!=='')monitorSet[s.monitor.trim()]=true});
+  Object.keys(monitorSet).sort().forEach(function(m){var o=document.createElement('option');o.value=m;o.textContent=m;mf.appendChild(o)});
   var rf=document.getElementById('roomFilter');
   var rooms=[...new Set(SESSIONS.map(function(s){return s.room}))].sort();
   rooms.forEach(function(r){var o=document.createElement('option');o.value=r;o.textContent=r;rf.appendChild(o)});
@@ -177,7 +183,7 @@ function render(){
 
   var filtered=SESSIONS.filter(function(s){
     if(dayVal&&s.date!==dayVal)return false;
-    if(monVal&&getMonitor(s)!==monVal)return false;
+    if(monVal&&getMonitor(s).trim()!==monVal.trim())return false;
     if(roomVal&&s.room!==roomVal)return false;
     return true;
   });
