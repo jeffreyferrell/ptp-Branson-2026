@@ -196,7 +196,9 @@ function processSheetData(sessions){
   var processed=[];
   var roomData=[];
 
-  Object.values(slotMap).forEach(function(slot){
+  Object.values(slotMap).filter(function(slot){
+    return slot.monitor&&slot.monitor.trim()!=='';
+  }).forEach(function(slot){
     var monitor=slot.monitor||'';
     var isMulti=slot.speakers.length>1;
     var speaker=isMulti?'':( slot.speakers[0]||'');
