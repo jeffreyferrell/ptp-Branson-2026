@@ -30,6 +30,8 @@ select:focus{outline:none;border-color:#1a3a5c}
 .session-card{background:white;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.08);border-left:4px solid #1a3a5c}
 .session-card.multi{border-left-color:#e07b00}
 .session-card.shared{border-left-color:#7b5ea7}
+.session-card.optional{border-left-color:#2a9d8f}
+.badge-optional{background:#e0f5f3;color:#2a9d8f}
 .session-time{font-size:.95rem;font-weight:700;color:#1a3a5c;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .session-room{font-size:1rem;color:#1a1a1a;font-weight:500;margin:3px 0}
 .session-speaker{font-size:.85rem;color:#5a6a7a;margin:2px 0 4px}
@@ -315,7 +317,7 @@ document.getElementById('daySelect').addEventListener('change',function(){
 });
 
 function renderMonitorSchedule(name){
-  var sessions=DATA.filter(function(r){return r.Monitor_Name===name});
+  var sessions=DATA.filter(function(r){return r.Monitor_Name===name||r.Monitor_Name==='All Monitors'});
   var submitted=getSubmitted();
   var dayGroups={};
   sessions.forEach(function(s){
@@ -339,7 +341,8 @@ function renderMonitorSchedule(name){
       var isSubmitted=prevCount!==undefined;
       var safeKey=key.replace(/[|: ]/g,'_');
       SESSION_MAP[safeKey]=s;
-      var cardClass=isShared?'shared':(isMulti?'multi':'');
+      var isOptional=s.Monitor_Name==='All Monitors';
+      var cardClass=isOptional?'optional':(isShared?'shared':(isMulti?'multi':''));
       var dur=parseInt(s.Duration)||0;
       var durClass=dur<=30?'badge-dur-short':(dur<=45?'badge-dur-medium':'badge-dur-long');
       var durBadge=dur?'<span class="badge '+durClass+'">'+dur+' min</span>':'';
@@ -349,6 +352,7 @@ function renderMonitorSchedule(name){
       html+='<div class="session-room">'+s.Room+'</div>';
       if(s.Speaker)html+='<div class="session-speaker">'+s.Speaker+'</div>';
       html+='<div class="session-meta">';
+      if(isOptional)html+='<span class="badge badge-optional">Optional</span>';
       if(isShared)html+='<span class="badge badge-shared">Shared Monitor</span>';
       if(isMulti)html+='<span class="badge badge-multi">Multi-Speaker</span>';
       if(s.Track)html+='<span class="badge badge-track">'+s.Track+'</span>';
@@ -462,7 +466,7 @@ function submitAttendance(btnEl){
 }
 
 function renderSummaryOnly(name){
-  var sessions=DATA.filter(function(r){return r.Monitor_Name===name});
+  var sessions=DATA.filter(function(r){return r.Monitor_Name===name||r.Monitor_Name==='All Monitors'});
   var submitted=getSubmitted();
   var submittedCount=sessions.filter(function(s){return submitted[sessionKey(s)]!==undefined}).length;
   document.getElementById('monitor-summary').innerHTML=name+' &bull; <span class="total-badge">'+sessions.length+' sessions</span>'+(submittedCount>0?' &bull; ✓ '+submittedCount+' submitted':'');
