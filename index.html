@@ -77,6 +77,21 @@ select:focus{outline:none;border-color:#1a3a5c}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.error{background:#c0392b}
 .view{display:none}
+.checklist-section{margin-bottom:24px}
+.checklist-section h2{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#5a6a7a;padding:10px 0 6px;border-bottom:2px solid #dde3ea;margin-bottom:12px}
+.checklist-item{display:flex;align-items:flex-start;gap:12px;background:white;border-radius:10px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.08);cursor:pointer}
+.checklist-item.checked{background:#f6fffa;opacity:.75}
+.checklist-item input[type=checkbox]{width:20px;height:20px;flex-shrink:0;margin-top:2px;accent-color:#1a3a5c;cursor:pointer}
+.checklist-item label{font-size:.88rem;line-height:1.5;color:#1a1a1a;cursor:pointer}
+.checklist-item.checked label{text-decoration:line-through;color:#8a9aaa}
+.checklist-sub{font-size:.78rem;color:#5a6a7a;margin-top:3px;padding-left:4px}
+.checklist-sub li{margin-top:2px}
+.contact-box{background:#1a3a5c;color:white;border-radius:10px;padding:16px;margin-top:8px}
+.contact-box p{{font-size:.85rem;line-height:1.6}}
+.contact-box strong{color:#5b9bd5}
+.clear-btn{width:100%;padding:12px;background:#c0392b;color:white;border:none;border-radius:10px;font-size:.95rem;font-weight:700;cursor:pointer;margin-bottom:24px}
+.clear-btn:active{background:#a93226}
+.checklist-content{padding:12px 16px 32px}
 .view.active{display:block}
 </style>
 </head>
@@ -87,6 +102,7 @@ select:focus{outline:none;border-color:#1a3a5c}
 <div class="tabs">
 <div class="tab active" id="tab-monitor" onclick="switchTab('monitor')">&#128203; My Schedule</div>
 <div class="tab" id="tab-room" onclick="switchTab('room')">&#127963; Room View</div>
+<div class="tab" id="tab-checklist" onclick="switchTab('checklist')">&#9989; Checklist</div>
 </div>
 </header>
 
@@ -112,7 +128,179 @@ select:focus{outline:none;border-color:#1a3a5c}
 
 <div class="toast" id="toast"></div>
 
+<div class="view" id="view-checklist">
+<div class="checklist-content">
+<button class="clear-btn" onclick="clearChecklist()">&#10006; Clear All Checkboxes</button>
+
+<div class="checklist-section">
+<h2>Pre-Session Setup</h2>
+
+<div class="checklist-item" id="ci-1">
+<input type="checkbox" id="c1" onchange="toggleCheck('ci-1','c1')"/>
+<label for="c1">Check battery levels for Lav Mics &amp; PowerPoint clickers before each lesson
+<ul class="checklist-sub"><li>Replace if showing 2 or fewer bars</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-2">
+<input type="checkbox" id="c2" onchange="toggleCheck('ci-2','c2')"/>
+<label for="c2">Ensure lav mic is attached to speaker
+<ul class="checklist-sub"><li>Except with multi-speaker sessions use podium and/or handheld mic</li><li>Have speaker remove their PTP lanyard and badge</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-3">
+<input type="checkbox" id="c3" onchange="toggleCheck('ci-3','c3')"/>
+<label for="c3">Explain stage boundaries that video will capture
+<ul class="checklist-sub"><li>If the speaker moves while speaking</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-4">
+<input type="checkbox" id="c4" onchange="toggleCheck('ci-4','c4')"/>
+<label for="c4">For 7 Minutes of Wisdom panels, set additional chairs on stage or reserve front row seats
+<ul class="checklist-sub"><li>Seat them in the order they appear in the app</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-5">
+<input type="checkbox" id="c5" onchange="toggleCheck('ci-5','c5')"/>
+<label for="c5">Ensure their PowerPoint is uploaded onto computer and ready to use
+<ul class="checklist-sub"><li>Hand thumb-drives back to speaker as soon as they are loaded onto the laptop</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-6">
+<input type="checkbox" id="c6" onchange="toggleCheck('ci-6','c6')"/>
+<label for="c6">Inform speaker that you will hold up a 5 minute remaining sign
+<ul class="checklist-sub"><li>Speaker must end before 00:00</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-7">
+<input type="checkbox" id="c7" onchange="toggleCheck('ci-7','c7')"/>
+<label for="c7">If the room is filling up quickly
+<ul class="checklist-sub"><li>Make announcements for people to move toward the front and middle of each row</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-8">
+<input type="checkbox" id="c8" onchange="toggleCheck('ci-8','c8')"/>
+<label for="c8">If the room is full
+<ul class="checklist-sub"><li>Place "Do Not Enter - This Session is Full" sign on the entry doors</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-9">
+<input type="checkbox" id="c9" onchange="toggleCheck('ci-9','c9')"/>
+<label for="c9">Make sure no one stands in front of the camera
+<ul class="checklist-sub"><li>Smaller rooms have had this happen</li></ul>
+</label></div>
+
+<div class="checklist-item" id="ci-10">
+<input type="checkbox" id="c10" onchange="toggleCheck('ci-10','c10')"/>
+<label for="c10">Check that camera is recording and is capturing speaker and presentation screen. Adjust accordingly</label>
+</div>
+
+<div class="checklist-item" id="ci-11">
+<input type="checkbox" id="c11" onchange="toggleCheck('ci-11','c11')"/>
+<label for="c11">Check that Subtitles setting is activated in PowerPoint</label>
+</div>
+</div>
+
+<div class="checklist-section">
+<h2>During &amp; Post-Session</h2>
+
+<div class="checklist-item" id="ci-12">
+<input type="checkbox" id="c12" onchange="toggleCheck('ci-12','c12')"/>
+<label for="c12">Put camera headphones on to check that audio is coming through. Adjust sound if too low or too high</label>
+</div>
+
+<div class="checklist-item" id="ci-13">
+<input type="checkbox" id="c13" onchange="toggleCheck('ci-13','c13')"/>
+<label for="c13">15 minutes into the lesson — capture your count of the audience:
+<ul class="checklist-sub">
+<li>Count all persons in the room</li>
+<li>Open the PTP Monitor app and find your session card</li>
+<li>Enter your count in the Count field</li>
+<li>Select Yes or No for PowerPoint</li>
+<li>Tap Submit</li>
+</ul>
+</label></div>
+
+<div class="checklist-item" id="ci-14">
+<input type="checkbox" id="c14" onchange="toggleCheck('ci-14','c14')"/>
+<label for="c14">When 5 minutes are remaining, hold up sign. When 1 minute is remaining walk towards doors. Open doors at 00:00</label>
+</div>
+
+<div class="checklist-item" id="ci-15">
+<input type="checkbox" id="c15" onchange="toggleCheck('ci-15','c15')"/>
+<label for="c15">Collect all equipment from the speaker before they leave the stage/area</label>
+</div>
+
+<div class="checklist-item" id="ci-16">
+<input type="checkbox" id="c16" onchange="toggleCheck('ci-16','c16')"/>
+<label for="c16">Advance to next speaker/lesson slide on the laptop deck</label>
+</div>
+
+<div class="checklist-item" id="ci-17">
+<input type="checkbox" id="c17" onchange="toggleCheck('ci-17','c17')"/>
+<label for="c17">Prepare for next speaker or to transition room to following room monitor</label>
+</div>
+</div>
+
+<div class="checklist-section">
+<h2>Need Help?</h2>
+<div class="contact-box">
+<p>When reporting an issue please use GroupMe. Give room name then the issue.</p>
+<p style="margin-top:8px"><em>Ex: Cooper Creek &#8211; How to raise camera view</em></p>
+<p style="margin-top:12px">For immediate attention call or text:</p>
+<p style="margin-top:4px"><strong>Tim Togami</strong> 501-655-2331</p>
+<p><strong>Jeffrey Ferrell</strong> 662-288-6302</p>
+</div>
+</div>
+
+</div>
+</div>
+
 <script>
+function toggleCheck(divId, cbId){
+  var div=document.getElementById(divId);
+  var cb=document.getElementById(cbId);
+  if(div&&cb){
+    div.className='checklist-item'+(cb.checked?' checked':'');
+    saveChecklist();
+  }
+}
+
+function saveChecklist(){
+  var state={};
+  for(var i=1;i<=17;i++){
+    var cb=document.getElementById('c'+i);
+    if(cb)state['c'+i]=cb.checked;
+  }
+  try{localStorage.setItem('ptp_checklist',JSON.stringify(state))}catch(e){}
+}
+
+function loadChecklist(){
+  try{
+    var state=JSON.parse(localStorage.getItem('ptp_checklist')||'{}');
+    for(var i=1;i<=17;i++){
+      var cb=document.getElementById('c'+i);
+      var div=document.getElementById('ci-'+i);
+      if(cb&&state['c'+i]){
+        cb.checked=true;
+        if(div)div.className='checklist-item checked';
+      }
+    }
+  }catch(e){}
+}
+
+function clearChecklist(){
+  for(var i=1;i<=17;i++){
+    var cb=document.getElementById('c'+i);
+    var div=document.getElementById('ci-'+i);
+    if(cb){cb.checked=false;}
+    if(div){div.className='checklist-item';}
+  }
+  try{localStorage.removeItem('ptp_checklist')}catch(e){}
+}
+
+// Load checklist state on startup
+loadChecklist();
+
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(function(regs){
     regs.forEach(function(r){r.unregister()});
