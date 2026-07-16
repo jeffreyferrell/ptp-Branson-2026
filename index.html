@@ -516,7 +516,7 @@ function renderMonitorSchedule(name){
   Object.keys(dayGroups).sort().forEach(function(dateKey){
     var day=dayGroups[dateKey];
     day.sessions.sort(function(a,b){return timeToMins(a.Start_Time)-timeToMins(b.Start_Time)});
-    html+='<div class="day-group"><div class="day-header">'+day.label+'</div>';
+    html+='<div class="day-group" id="day-'+dateKey+'"><div class="day-header">'+day.label+'</div>';
     day.sessions.forEach(function(s){
       var isMulti=s.Multi_Speaker==='Yes';
       var isShared=s.Is_Shared==='Yes';
@@ -557,6 +557,13 @@ function renderMonitorSchedule(name){
     html+='</div>';
   });
   document.getElementById('monitor-content').innerHTML=html;
+
+  // Scroll to today's date section
+  var today=new Date().toISOString().split('T')[0];
+  var todayEl=document.getElementById('day-'+today);
+  if(todayEl){
+    setTimeout(function(){todayEl.scrollIntoView({behavior:'smooth',block:'start'})},100);
+  }
 }
 
 function renderRoomView(date){
