@@ -46,6 +46,10 @@ select:focus{outline:none;border-color:#1a3a5c}
 .room-count{font-size:.8rem;color:#3949ab;font-weight:700;white-space:nowrap;margin-left:8px}
 .filter-toggle{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.85rem;font-weight:600;color:#5a6a7a;text-transform:none;letter-spacing:0;cursor:pointer}
 .filter-toggle input{width:18px;height:18px;accent-color:#1a3a5c;cursor:pointer}
+.session-card.current{box-shadow:0 0 0 2px #1a3a5c,0 1px 4px rgba(0,0,0,.12);scroll-margin-top:130px}
+.time-block.current{box-shadow:0 0 0 2px #1a3a5c;scroll-margin-top:130px}
+.badge-now{background:#1a3a5c;color:#fff}
+.badge-next{background:#e8f0f8;color:#1a3a5c}
 .badge-dur-short{background:#fff8e1;color:#e07b00}
 .badge-dur-medium{background:#e8f0f8;color:#1a3a5c}
 .badge-dur-long{background:#e6f4ea;color:#2d7a3a}
@@ -339,6 +343,8 @@ function enqueueOutbox(key,rec){var o=getOutbox();o[key]=rec;saveOutbox(o)}
 function dequeueOutbox(key){var o=getOutbox();delete o[key];saveOutbox(o)}
 function sessionKey(s){return s.Monitor_Name+'|'+s.Date+'|'+s.Start_Time+'|'+s.Room}
 function timeToMins(t){var p=t.split(' ');var hm=p[0].split(':');var h=parseInt(hm[0]),m=parseInt(hm[1]);if(p[1]==='PM'&&h!==12)h+=12;if(p[1]==='AM'&&h===12)h=0;return h*60+m}
+// Local "now" as {date:'YYYY-MM-DD', mins:<minutes since midnight>} for current-session logic.
+function nowInfo(){var d=new Date();var mm=d.getMonth()+1,dd=d.getDate();var date=d.getFullYear()+'-'+(mm<10?'0':'')+mm+'-'+(dd<10?'0':'')+dd;return{date:date,mins:d.getHours()*60+d.getMinutes()}}
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
   document.querySelectorAll('.view').forEach(function(x){x.classList.remove('active')});
@@ -636,11 +642,26 @@ function renderMonitorSchedule(name){
   if(!visible.length)html='<div class="empty-state"><div class="icon">✅</div><p>'+(hideFilled?'All your sessions have a count':'No sessions')+'</p></div>';
   document.getElementById('monitor-content').innerHTML=html;
 
-  // Scroll to today's date section
-  var today=new Date().toISOString().split('T')[0];
-  var todayEl=document.getElementById('day-'+today);
-  if(todayEl){
-    setTimeout(function(){todayEl.scrollIntoView({behavior:'smooth',block:'start'})},100);
+  // Bring the in-progress (or next-up) session to the top and highlight it.
+  var ni=nowInfo();
+  var target=null;
+  visible.slice().sort(function(a,b){
+    if(a.Date!==b.Date)return a.Date.localeCompare(b.Date);
+    return timeToMins(a.Start_Time)-timeToMins(b.Start_Time);
+  }).some(function(s){
+    if(s.Date>ni.date||(s.Date===ni.date&&timeToMins(s.End_Time)>ni.mins)){target=s;return true}
+    return false;
+  });
+  if(target){
+    var tKey=sessionKey(target).replace(/[|: ]/g,'_');
+    var el=document.getElementById('card-'+tKey);
+    if(el){
+      var inProgress=target.Date===ni.date&&timeToMins(target.Start_Time)<=ni.mins&&timeToMins(target.End_Time)>ni.mins;
+      el.classList.add('current');
+      var meta=el.querySelector('.session-meta');
+      if(meta){var lbl=document.createElement('span');lbl.className='badge '+(inProgress?'badge-now':'badge-next');lbl.textContent=inProgress?'● NOW':'▲ UP NEXT';meta.insertBefore(lbl,meta.firstChild)}
+      setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'})},100);
+    }
   }
 }
 
@@ -659,11 +680,16 @@ function renderRoomView(date){
   summaryEl.style.display='block';
   summaryEl.innerHTML=dayLabel+' &bull; <span class="total-badge">'+sessions.length+' sessions</span>';
   var sortedSlots=Object.values(timeSlots).sort(function(a,b){return timeToMins(a.start)-timeToMins(b.start)});
+  var ni=nowInfo();
+  var isToday=date===ni.date;
+  var currentSlot=null;
+  if(isToday)sortedSlots.some(function(sl){if(timeToMins(sl.end)>ni.mins){currentSlot=sl;return true}return false});
   var html='';
-  sortedSlots.forEach(function(slot){
+  sortedSlots.forEach(function(slot,i){
     var active=ROOM_ORDER.filter(function(r){return slot.byRoom[r]});
     if(!active.length)return;
-    html+='<div class="time-block"><div class="time-block-header">'+slot.start+' – '+slot.end+'</div>';
+    var isCur=slot===currentSlot;
+    html+='<div class="time-block'+(isCur?' current':'')+'" id="rslot-'+i+'"><div class="time-block-header">'+slot.start+' – '+slot.end+(isCur?'<span style="float:right">● NOW</span>':'')+'</div>';
     ROOM_ORDER.forEach(function(room){
       var s=slot.byRoom[room];
       if(!s)return;
@@ -677,6 +703,10 @@ function renderRoomView(date){
     html+='</div>';
   });
   document.getElementById('room-content').innerHTML=html;
+  if(isToday&&currentSlot){
+    var idx=sortedSlots.indexOf(currentSlot);
+    setTimeout(function(){var e=document.getElementById('rslot-'+idx);if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},100);
+  }
 }
 
 function setPPT(btnEl){
