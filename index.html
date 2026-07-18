@@ -42,6 +42,8 @@ select:focus{outline:none;border-color:#1a3a5c}
 .badge-track{background:#f0f4f8;color:#5a6a7a}
 .badge-submitted{background:#e6f4ea;color:#2d7a3a}
 .badge-pending{background:#fdf0d5;color:#b26a00}
+.badge-count{background:#eef2ff;color:#3949ab}
+.room-count{font-size:.8rem;color:#3949ab;font-weight:700;white-space:nowrap;margin-left:8px}
 .badge-dur-short{background:#fff8e1;color:#e07b00}
 .badge-dur-medium{background:#e8f0f8;color:#1a3a5c}
 .badge-dur-long{background:#e6f4ea;color:#2d7a3a}
@@ -315,6 +317,12 @@ var ROOM_ORDER=["Ballroom A", "Boston Ferry", "Roark Creek", "Compton Ferry", "C
 var SESSION_MAP={};
 var DATA=[];
 var ROOM_DATA=[];
+// Shared attendance counts keyed by Date|StartTime|Room, so every monitor can see
+// any session's count — not just the ones they entered on this device. Populated by
+// loadAttendance() from a getAttendance endpoint Jeffrey would add (see update.md);
+// stays empty (device-local only) until that endpoint exists.
+var ATTEND={};
+var ATTENDANCE_READ_URL=ATTENDANCE_URL;
 
 function getSubmitted(){try{return JSON.parse(localStorage.getItem('submitted')||'{}')||{}}catch(e){return{}}}
 function markSubmitted(k,c){var s=getSubmitted();s[k]=c;localStorage.setItem('submitted',JSON.stringify(s))}
@@ -442,6 +450,44 @@ function buildMonitorList(data){
   return Object.keys(set).sort();
 }
 
+// Shared count for a session, keyed by date+start time+room (monitor-independent).
+function sharedCount(s){
+  var v=ATTEND[s.Date+'|'+s.Start_Time+'|'+s.Room];
+  return v!==undefined?v:undefined;
+}
+// Best count we know for a session: this device's own pending/submitted value first,
+// otherwise the shared value from the sheet. Undefined means "no count anywhere".
+function effectiveCount(s){
+  var key=sessionKey(s);
+  var ob=getOutbox();
+  if(ob[key]!==undefined)return ob[key].headcount;
+  var sub=getSubmitted();
+  if(sub[key]!==undefined)return sub[key];
+  return sharedCount(s);
+}
+// Pull shared counts from the sheet. Silently no-ops until the endpoint exists.
+function loadAttendance(){
+  fetch(ATTENDANCE_READ_URL+'?action=getAttendance')
+  .then(function(r){return r.json()})
+  .then(function(rows){
+    if(!Array.isArray(rows))return;
+    var map={};
+    rows.forEach(function(row){
+      if(!row||!row.date||!row.room)return;
+      var start=(row.time||'').split(' - ')[0].trim();
+      var c=parseInt(row.headcount);
+      if(!start||isNaN(c))return;
+      map[row.date+'|'+start+'|'+row.room]=c; // latest row wins
+    });
+    ATTEND=map;
+    var sel=document.getElementById('monitorSelect');
+    if(sel&&sel.value)renderMonitorSchedule(sel.value);
+    var ds=document.getElementById('daySelect');
+    if(ds&&ds.value)renderRoomView(ds.value);
+  })
+  .catch(function(){/* endpoint not available yet — counts stay device-local */});
+}
+
 function loadData(){
   fetch(API_URL+'?action=getSessions')
   .then(function(r){return r.json()})
@@ -485,6 +531,7 @@ function loadData(){
 
     document.getElementById('monitor-content').innerHTML='<div class="empty-state"><div class="icon">&#128203;</div><p>Select your name above to see your schedule</p></div>';
     renderRoomView(defaultDate);
+    loadAttendance();
   })
   .catch(function(err){
     document.getElementById('monitor-content').innerHTML='<div class="empty-state"><div class="icon">&#128203;</div><p>Could not load schedule. Please check your connection and refresh.</p></div>';
@@ -557,6 +604,7 @@ function renderMonitorSchedule(name){
       if(s.Track)html+='<span class="badge badge-track">'+s.Track+'</span>';
       if(isPending)html+='<span class="badge badge-pending" id="badge-'+safeKey+'">⏳ '+pendingRec.headcount+' pending</span>';
       else if(isSubmitted)html+='<span class="badge badge-submitted" id="badge-'+safeKey+'">✓ '+prevCount+' submitted</span>';
+      else{var recCount=sharedCount(s);if(recCount!==undefined)html+='<span class="badge badge-count">👥 '+recCount+' counted</span>';}
       html+='</div>';
       html+='<div class="attendance-row">';
       html+='<span class="attendance-label">Count:</span>';
@@ -610,7 +658,9 @@ function renderRoomView(date){
       var isShared=s.Monitor_Name&&s.Monitor_Name.indexOf(' / ')>=0;
       var isMulti=s.Multi_Speaker==='Yes';
       var dotClass=isShared?'shared':(isMulti?'multi':'');
-      html+='<div class="room-row"><div class="room-dot '+dotClass+'"></div><div class="room-name">'+room+'</div><div class="monitor-name">'+s.Monitor_Name+'</div></div>';
+      var rc=sharedCount(s);
+      var countHtml=rc!==undefined?'<div class="room-count">👥 '+rc+'</div>':'';
+      html+='<div class="room-row"><div class="room-dot '+dotClass+'"></div><div class="room-name">'+room+'</div><div class="monitor-name">'+s.Monitor_Name+'</div>'+countHtml+'</div>';
     });
     html+='</div>';
   });
@@ -666,6 +716,7 @@ function flushOutbox(){
   return Promise.all(keys.map(function(k){return sendOutboxItem(k)})).then(function(){
     var sel=document.getElementById('monitorSelect');
     if(sel&&sel.value)renderMonitorSchedule(sel.value);
+    if(typeof loadAttendance==='function')loadAttendance();
   });
 }
 
