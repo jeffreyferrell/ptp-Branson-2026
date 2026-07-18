@@ -106,6 +106,23 @@ function timeToMins(t){
   return h*60+m;
 }
 
+// Parse times/day directly from the "YYYY-MM-DD HH:MM..." string (no Date object),
+// so admin.html can't shift by a timezone the way new Date(...) does — matches index.html.
+function formatTime(dtStr){
+  var timePart=(dtStr||'').split(' ')[1]||'00:00';
+  var tp=timePart.split(':');
+  var h=parseInt(tp[0]),m=parseInt(tp[1]||0);
+  var ampm=h>=12?'PM':'AM';
+  var h12=h%12||12;
+  return(h12<10?'0':'')+h12+':'+(m<10?'0':'')+m+' '+ampm;
+}
+function getDow(dtStr){
+  var p=(dtStr||'').split(' ')[0].split('-');
+  var dt=new Date(Date.UTC(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])));
+  var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return days[dt.getUTCDay()];
+}
+
 // Load sessions and monitors from Google Sheets
 Promise.all([
   fetch(API_URL+'?action=getSessions').then(function(r){return r.json()}),
@@ -118,19 +135,10 @@ Promise.all([
   var seen={};
   rawSessions.forEach(function(s){
     if(!s.room||!s.start)return;
-    var dt=new Date(s.start.replace(' ','T'));
     var date=s.start.substring(0,10);
-    var hour=dt.getHours(),min=dt.getMinutes();
-    var ampm=hour>=12?'PM':'AM';
-    var h12=hour%12||12;
-    var startTime=(h12<10?'0':'')+h12+':'+(min<10?'0':'')+min+' '+ampm;
-    var edt=new Date(s.end.replace(' ','T'));
-    var eh=edt.getHours(),em=edt.getMinutes();
-    var eampm=eh>=12?'PM':'AM';
-    var eh12=eh%12||12;
-    var endTime=(eh12<10?'0':'')+eh12+':'+(em<10?'0':'')+em+' '+eampm;
-    var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    var dow=days[dt.getDay()];
+    var startTime=formatTime(s.start);
+    var endTime=formatTime(s.end);
+    var dow=getDow(s.start);
     var key=date+'|'+startTime+'|'+s.room;
     if(!seen[key]){
       seen[key]={
