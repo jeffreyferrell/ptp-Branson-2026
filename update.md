@@ -76,6 +76,42 @@ one entry per recorded session:
 - `monitor` may be included but isn't required — counts are shown per room/time.
 - No auth needed; it's read-only, non-sensitive data.
 
+**Ready-to-paste starting point** (in the *attendance* Apps Script — the one that
+already handles `submitAttendance`). Adjust the tab name and column headers to match
+how submits are stored:
+
+```javascript
+// Add to doGet(e), alongside whatever it already does:
+//   if (e.parameter.action === 'getAttendance') return getAttendance();
+
+function getAttendance() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Attendance'); // <-- your tab
+  var values = sheet.getDataRange().getValues();
+  var headers = values.shift().map(function (h) { return String(h).trim().toLowerCase(); });
+  var iDate  = headers.indexOf('date');
+  var iTime  = headers.indexOf('time');
+  var iRoom  = headers.indexOf('room');
+  var iCount = headers.indexOf('headcount');
+  var out = [];
+  values.forEach(function (r) {
+    if (!r[iRoom]) return;
+    var d = r[iDate];
+    // If the date cell is a real Date (not a "2026-07-15" string), format it:
+    if (Object.prototype.toString.call(d) === '[object Date]') {
+      d = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    }
+    out.push({ date: String(d), time: String(r[iTime]), room: String(r[iRoom]), headcount: Number(r[iCount]) });
+  });
+  return ContentService.createTextOutput(JSON.stringify(out))
+                       .setMimeType(ContentService.MimeType.JSON);
+}
+```
+
+After adding it, **re-deploy the web app** (Deploy → Manage deployments → new version)
+so the change goes live. The app picks up the numbers on next load — no app change,
+no new URL. If the returned `date`/`time`/`room` strings match what's in the schedule,
+the counts light up automatically on every login.
+
 ### 2. Confirmation ack + de-duplicate on write
 Two related improvements to `doPost(submitAttendance)`:
 
