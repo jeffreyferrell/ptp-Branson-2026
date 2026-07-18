@@ -44,6 +44,8 @@ select:focus{outline:none;border-color:#1a3a5c}
 .badge-pending{background:#fdf0d5;color:#b26a00}
 .badge-count{background:#eef2ff;color:#3949ab}
 .room-count{font-size:.8rem;color:#3949ab;font-weight:700;white-space:nowrap;margin-left:8px}
+.filter-toggle{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.85rem;font-weight:600;color:#5a6a7a;text-transform:none;letter-spacing:0;cursor:pointer}
+.filter-toggle input{width:18px;height:18px;accent-color:#1a3a5c;cursor:pointer}
 .badge-dur-short{background:#fff8e1;color:#e07b00}
 .badge-dur-medium{background:#e8f0f8;color:#1a3a5c}
 .badge-dur-long{background:#e6f4ea;color:#2d7a3a}
@@ -113,6 +115,7 @@ select:focus{outline:none;border-color:#1a3a5c}
 <div class="controls"><div class="control-group">
 <label for="monitorSelect">Select Your Name</label>
 <select id="monitorSelect"><option value="">— Choose a monitor —</option></select>
+<label class="filter-toggle"><input type="checkbox" id="hideFilled" onchange="onToggleHideFilled()"/> Hide sessions already counted</label>
 </div></div>
 <div class="summary" id="monitor-summary"></div>
 <div class="content" id="monitor-content">
@@ -558,12 +561,20 @@ document.getElementById('daySelect').addEventListener('change',function(){
   if(this.value)renderRoomView(this.value);
 });
 
+function onToggleHideFilled(){
+  var sel=document.getElementById('monitorSelect');
+  if(sel&&sel.value)renderMonitorSchedule(sel.value);
+}
+
 function renderMonitorSchedule(name){
   var sessions=DATA.filter(function(r){return r.Monitor_Name===name||r.Monitor_Name==='All Monitors'});
   var submitted=getSubmitted();
   var outbox=getOutbox();
+  var hideEl=document.getElementById('hideFilled');
+  var hideFilled=hideEl&&hideEl.checked;
+  var visible=hideFilled?sessions.filter(function(s){return effectiveCount(s)===undefined}):sessions;
   var dayGroups={};
-  sessions.forEach(function(s){
+  visible.forEach(function(s){
     if(!dayGroups[s.Date])dayGroups[s.Date]={label:s.Day_of_Week+', July '+parseInt(s.Date.split('-')[2]),sessions:[]};
     dayGroups[s.Date].sessions.push(s);
   });
@@ -622,6 +633,7 @@ function renderMonitorSchedule(name){
     });
     html+='</div>';
   });
+  if(!visible.length)html='<div class="empty-state"><div class="icon">✅</div><p>'+(hideFilled?'All your sessions have a count':'No sessions')+'</p></div>';
   document.getElementById('monitor-content').innerHTML=html;
 
   // Scroll to today's date section
