@@ -41,6 +41,7 @@ select:focus{outline:none;border-color:#1a3a5c}
 .badge-shared{background:#f0ebf8;color:#7b5ea7}
 .badge-track{background:#f0f4f8;color:#5a6a7a}
 .badge-submitted{background:#e6f4ea;color:#2d7a3a}
+.badge-pending{background:#fdf0d5;color:#b26a00}
 .badge-dur-short{background:#fff8e1;color:#e07b00}
 .badge-dur-medium{background:#e8f0f8;color:#1a3a5c}
 .badge-dur-long{background:#e6f4ea;color:#2d7a3a}
@@ -319,6 +320,12 @@ function getSubmitted(){try{return JSON.parse(localStorage.getItem('submitted')|
 function markSubmitted(k,c){var s=getSubmitted();s[k]=c;localStorage.setItem('submitted',JSON.stringify(s))}
 function getSubmittedPPT(k){try{var s=JSON.parse(localStorage.getItem('submitted_ppt')||'{}');return s[k]||''}catch(e){return''}}
 function markSubmittedPPT(k,v){try{var s=JSON.parse(localStorage.getItem('submitted_ppt')||'{}');s[k]=v;localStorage.setItem('submitted_ppt',JSON.stringify(s))}catch(e){}}
+// Outbox: submissions that have been entered but not yet confirmed sent to the sheet.
+// Keyed by sessionKey. Entries stay here until a network request actually reaches the server.
+function getOutbox(){try{return JSON.parse(localStorage.getItem('ptp_outbox')||'{}')||{}}catch(e){return{}}}
+function saveOutbox(o){try{localStorage.setItem('ptp_outbox',JSON.stringify(o))}catch(e){}}
+function enqueueOutbox(key,rec){var o=getOutbox();o[key]=rec;saveOutbox(o)}
+function dequeueOutbox(key){var o=getOutbox();delete o[key];saveOutbox(o)}
 function sessionKey(s){return s.Monitor_Name+'|'+s.Date+'|'+s.Start_Time+'|'+s.Room}
 function timeToMins(t){var p=t.split(' ');var hm=p[0].split(':');var h=parseInt(hm[0]),m=parseInt(hm[1]);if(p[1]==='PM'&&h!==12)h+=12;if(p[1]==='AM'&&h===12)h=0;return h*60+m}
 function switchTab(t){
@@ -487,6 +494,10 @@ function loadData(){
 
 loadData();
 
+// Retry any counts saved on this device but not yet confirmed sent.
+flushOutbox();
+window.addEventListener('online',flushOutbox);
+
 document.getElementById('monitorSelect').addEventListener('change',function(){
   var v=this.value;
   if(v)renderMonitorSchedule(v);
@@ -503,6 +514,7 @@ document.getElementById('daySelect').addEventListener('change',function(){
 function renderMonitorSchedule(name){
   var sessions=DATA.filter(function(r){return r.Monitor_Name===name||r.Monitor_Name==='All Monitors'});
   var submitted=getSubmitted();
+  var outbox=getOutbox();
   var dayGroups={};
   sessions.forEach(function(s){
     if(!dayGroups[s.Date])dayGroups[s.Date]={label:s.Day_of_Week+', July '+parseInt(s.Date.split('-')[2]),sessions:[]};
@@ -523,6 +535,9 @@ function renderMonitorSchedule(name){
       var key=sessionKey(s);
       var prevCount=submitted[key];
       var isSubmitted=prevCount!==undefined;
+      var pendingRec=outbox[key];
+      var isPending=pendingRec!==undefined;
+      var shownCount=isPending?pendingRec.headcount:(isSubmitted?prevCount:'');
       var safeKey=key.replace(/[|: ]/g,'_');
       SESSION_MAP[safeKey]=s;
       var isOptional=s.Monitor_Name==='All Monitors';
@@ -540,18 +555,21 @@ function renderMonitorSchedule(name){
       if(isShared)html+='<span class="badge badge-shared">Shared Monitor</span>';
       if(isMulti)html+='<span class="badge badge-multi">Multi-Speaker</span>';
       if(s.Track)html+='<span class="badge badge-track">'+s.Track+'</span>';
-      if(isSubmitted)html+='<span class="badge badge-submitted" id="badge-'+safeKey+'">✓ '+prevCount+' submitted</span>';
+      if(isPending)html+='<span class="badge badge-pending" id="badge-'+safeKey+'">⏳ '+pendingRec.headcount+' pending</span>';
+      else if(isSubmitted)html+='<span class="badge badge-submitted" id="badge-'+safeKey+'">✓ '+prevCount+' submitted</span>';
       html+='</div>';
       html+='<div class="attendance-row">';
       html+='<span class="attendance-label">Count:</span>';
-      html+='<input class="attendance-input" type="number" min="0" max="999" inputmode="numeric" value="'+(isSubmitted?prevCount:'')+'" id="input-'+safeKey+'"/>';
+      html+='<input class="attendance-input" type="number" min="0" max="999" inputmode="numeric" value="'+shownCount+'" id="input-'+safeKey+'"/>';
       html+='<span class="attendance-label">PPT:</span>';
       html+='<div class="ppt-buttons">';
       html+='<button class="btn-ppt'+(pptVal==='Yes'?' selected-yes':'')+'" id="ppt-yes-'+safeKey+'" data-key="'+safeKey+'" data-val="Yes" onclick="setPPT(this)">Yes</button>';
       html+='<button class="btn-ppt'+(pptVal==='No'?' selected-no':'')+'" id="ppt-no-'+safeKey+'" data-key="'+safeKey+'" data-val="No" onclick="setPPT(this)">No</button>';
       html+='</div></div>';
       html+='<div class="submit-row">';
-      html+='<button class="'+(isSubmitted?'btn-submitted-full':'btn-submit-full')+'" id="btn-'+safeKey+'" data-key="'+safeKey+'" onclick="submitAttendance(this)">'+(isSubmitted?'✓ Update':'Submit')+'</button>';
+      var btnClass=(isSubmitted&&!isPending)?'btn-submitted-full':'btn-submit-full';
+      var btnText=isPending?'Retry send':(isSubmitted?'✓ Update':'Submit');
+      html+='<button class="'+btnClass+'" id="btn-'+safeKey+'" data-key="'+safeKey+'" onclick="submitAttendance(this)">'+btnText+'</button>';
       html+='</div></div>';
     });
     html+='</div>';
@@ -609,6 +627,64 @@ function setPPT(btnEl){
   document.getElementById('ppt-no-'+safeKey).className='btn-ppt'+(val==='No'?' selected-no':'');
 }
 
+// Build the POST body for a queued submission record.
+function outboxParams(rec){
+  var params=new URLSearchParams();
+  params.append('action','submitAttendance');
+  params.append('monitor',rec.monitor);
+  params.append('date',rec.date);
+  params.append('time',rec.time);
+  params.append('room',rec.room);
+  params.append('headcount',rec.headcount);
+  params.append('powerpoint',rec.powerpoint||'Not selected');
+  return params;
+}
+
+// Send one queued item. Uses no-cors: fetch resolves (opaque) once the request
+// reaches the server, and rejects only on a genuine network failure. That gives a
+// reliable sent/not-sent signal — unlike a plain fetch, which can reject on the
+// Apps Script 302→googleusercontent redirect even when the write succeeded.
+// (It still can't confirm the row was written — see update.md for the backend ack.)
+function sendOutboxItem(key){
+  var rec=getOutbox()[key];
+  if(!rec)return Promise.resolve(true);
+  return fetch(ATTENDANCE_URL,{method:'POST',mode:'no-cors',body:outboxParams(rec)})
+    .then(function(){
+      dequeueOutbox(key);
+      markSubmitted(key,rec.headcount);
+      return true;
+    })
+    .catch(function(){
+      return false; // leave it queued for a later retry
+    });
+}
+
+// Retry every queued item; used on load and when connectivity returns.
+function flushOutbox(){
+  var keys=Object.keys(getOutbox());
+  if(!keys.length)return Promise.resolve();
+  return Promise.all(keys.map(function(k){return sendOutboxItem(k)})).then(function(){
+    var sel=document.getElementById('monitorSelect');
+    if(sel&&sel.value)renderMonitorSchedule(sel.value);
+  });
+}
+
+// Update a single card's badge/button between pending and submitted states.
+function paintCard(safeKey,state,count){
+  var btn=document.getElementById('btn-'+safeKey);
+  if(btn){
+    btn.disabled=false;
+    if(state==='submitted'){btn.className='btn-submitted-full';btn.textContent='✓ Update';}
+    else{btn.className='btn-submit-full';btn.textContent='Retry send';}
+  }
+  var meta=document.querySelector('#card-'+safeKey+' .session-meta');
+  if(!meta)return;
+  var badge=document.getElementById('badge-'+safeKey);
+  if(!badge){badge=document.createElement('span');badge.id='badge-'+safeKey;meta.appendChild(badge);}
+  if(state==='submitted'){badge.className='badge badge-submitted';badge.textContent='✓ '+count+' submitted';}
+  else{badge.className='badge badge-pending';badge.textContent='⏳ '+count+' pending';}
+}
+
 function submitAttendance(btnEl){
   var safeKey=btnEl.getAttribute('data-key');
   var session=SESSION_MAP[safeKey];
@@ -617,42 +693,25 @@ function submitAttendance(btnEl){
   var input=document.getElementById('input-'+safeKey);
   var count=input.value.trim();
   if(count===''||isNaN(count)||parseInt(count)<0){showToast('Please enter a valid count',true);return}
+  count=parseInt(count);
+  var pptVal=getSubmittedPPT(key);
+  // Queue first, so the count is never lost even if the send fails.
+  enqueueOutbox(key,{
+    monitor:session.Monitor_Name,date:session.Date,
+    time:session.Start_Time+' - '+session.End_Time,room:session.Room,
+    headcount:count,powerpoint:pptVal||'Not selected',ts:Date.now()
+  });
   btnEl.disabled=true;
   btnEl.textContent='Saving...';
-  var pptVal=getSubmittedPPT(key);
-  var params=new URLSearchParams();
-  params.append('action','submitAttendance');
-  params.append('monitor',session.Monitor_Name);
-  params.append('date',session.Date);
-  params.append('time',session.Start_Time+' - '+session.End_Time);
-  params.append('room',session.Room);
-  params.append('headcount',parseInt(count));
-  params.append('powerpoint',pptVal||'Not selected');
-  fetch(ATTENDANCE_URL,{method:'POST',body:params})
-  .then(function(){
-    markSubmitted(key,parseInt(count));
-    btnEl.disabled=false;
-    btnEl.className='btn-submitted-full';
-    btnEl.textContent='✓ Update';
-    var badge=document.getElementById('badge-'+safeKey);
-    if(badge)badge.textContent='✓ '+count+' submitted';
-    else{
-      var nb=document.createElement('span');
-      nb.className='badge badge-submitted';
-      nb.id='badge-'+safeKey;
-      nb.textContent='✓ '+count+' submitted';
-      document.getElementById('card-'+safeKey).querySelector('.session-meta').appendChild(nb);
+  sendOutboxItem(key).then(function(ok){
+    if(ok){
+      paintCard(safeKey,'submitted',count);
+      showToast('Submitted! ✓');
+    }else{
+      paintCard(safeKey,'pending',count);
+      showToast('Saved on device — will send when back online',true);
     }
     renderSummaryOnly(session.Monitor_Name);
-    showToast('Submitted! ✓');
-  })
-  .catch(function(){
-    markSubmitted(key,parseInt(count));
-    btnEl.disabled=false;
-    btnEl.className='btn-submitted-full';
-    btnEl.textContent='✓ Update';
-    renderSummaryOnly(session.Monitor_Name);
-    showToast('Submitted! ✓');
   });
 }
 
