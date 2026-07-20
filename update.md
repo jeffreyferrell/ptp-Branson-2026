@@ -53,9 +53,11 @@ per-event timezone constant to set wrong.
 
 ## Backend asks (need the Apps Script / Sheet — your call)
 
-### 1. `getAttendance` read endpoint — unlocks "see any session's count"
-Feature #2 above renders shared counts but has nothing to read yet. A small `doGet`
-action would light it up. The client already calls:
+### 1. `getAttendance` read endpoint — unlocks shared counts *and* the Reports tab
+This one endpoint powers two things that are already built and waiting on it: the
+shared counts on the monitor app (#2 above) **and** the new **Reports tab on
+`admin.html`** (coverage/gaps, per-day and per-room rollups, CSV export). Both render
+nothing until this exists. A small `doGet` action lights up both. The client calls:
 
 ```
 GET  {ATTENDANCE_URL}?action=getAttendance
