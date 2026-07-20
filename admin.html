@@ -42,14 +42,43 @@ select:focus{outline:none;border-color:#1a3a5c}
 .loading{text-align:center;padding:40px 20px;color:#5a6a7a}
 .loading .spinner{width:40px;height:40px;border:4px solid #dde3ea;border-top-color:#1a3a5c;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
 @keyframes spin{to{transform:rotate(360deg)}}
+.tabs{display:flex;margin-top:12px}
+.tab{flex:1;padding:9px;font-size:.85rem;font-weight:600;color:rgba(255,255,255,0.6);cursor:pointer;border-bottom:3px solid transparent}
+.tab.active{color:white;border-bottom-color:#5b9bd5}
+.view{display:none}
+.view.active{display:block}
+.report-section{margin:0 0 22px}
+.report-section h2{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#5a6a7a;padding:8px 0;border-bottom:2px solid #dde3ea;margin-bottom:12px}
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.stat-tile{flex:1;min-width:96px;background:white;border-radius:10px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.08);text-align:center}
+.stat-num{font-size:1.5rem;font-weight:800;color:#1a3a5c}
+.stat-label{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#5a6a7a;margin-top:4px}
+.rtable{width:100%;border-collapse:collapse;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);font-size:.85rem}
+.rtable th{background:#1a3a5c;color:white;text-align:left;padding:8px 10px;font-size:.68rem;text-transform:uppercase;letter-spacing:.5px}
+.rtable td{padding:8px 10px;border-bottom:1px solid #f0f4f8}
+.rtable tr:last-child td{border-bottom:none}
+.rtable td.num,.rtable th.num{text-align:right}
+.gap-item{display:flex;align-items:center;gap:10px;background:white;border-radius:8px;padding:10px 12px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid #e07b00}
+.gap-when{font-size:.78rem;color:#5a6a7a;font-weight:600;white-space:nowrap}
+.gap-room{font-size:.9rem;font-weight:600;flex:1}
+.gap-mon{font-size:.78rem;color:#5a6a7a;text-align:right;max-width:45%}
+.report-banner{background:#fff8e1;border:1px solid #f0d9a0;color:#8a6d00;border-radius:10px;padding:12px 14px;font-size:.85rem;line-height:1.5;margin-bottom:16px}
+.report-banner code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
+.btn-export{padding:10px 14px;background:#1a3a5c;color:white;border:none;border-radius:10px;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap;align-self:flex-start}
+.all-covered{text-align:center;padding:20px;color:#2d7a3a;font-weight:600}
 </style>
 </head>
 <body>
 <header>
 <h1>PTP 2026 Admin</h1>
 <p>Monitor Assignment Manager</p>
+<div class="tabs">
+<div class="tab active" id="tab-assign" onclick="switchTab('assign')">Assignments</div>
+<div class="tab" id="tab-reports" onclick="switchTab('reports')">Reports</div>
+</div>
 </header>
 
+<div class="view active" id="view-assign">
 <div class="controls">
   <div>
     <label>Filter by Day</label>
@@ -82,13 +111,144 @@ select:focus{outline:none;border-color:#1a3a5c}
   <button class="btn-reset" onclick="resetChanges()">Reset</button>
   <button class="btn-save" id="saveBtn" onclick="saveChanges()" disabled>Save Changes</button>
 </div>
+</div>
+
+<div class="view" id="view-reports">
+<div class="controls">
+  <div>
+    <label>Report Day</label>
+    <select id="reportDayFilter">
+      <option value="">— All Days —</option>
+      <option value="2026-07-15">Wednesday, July 15</option>
+      <option value="2026-07-16">Thursday, July 16</option>
+      <option value="2026-07-17">Friday, July 17</option>
+      <option value="2026-07-18">Saturday, July 18</option>
+      <option value="2026-07-19">Sunday, July 19</option>
+      <option value="2026-07-20">Monday, July 20</option>
+    </select>
+  </div>
+  <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+</div>
+<div class="content" id="report-content">
+  <div class="empty">Loading reports…</div>
+</div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 var API_URL="https://script.google.com/macros/s/AKfycbwBKPcaWwpZMfjXuFnmtwmBIaZ70YB8FzqRp8zXhrLDNHB-tvgtYR9oiCSg58UoZSgZLQ/exec";
+var ATTENDANCE_URL="https://script.google.com/macros/s/AKfycbyoVrQH7j-ZVNAClM6T6sv5Cc40MqG1BzZOCbzzJND00yhTdSeni32nlYT1_sgX5cag/exec";
 var SESSIONS=[];
 var MONITORS=[];
 var changes={};  // rowNum -> newMonitor
+var ATTEND={};             // date|startTime|room -> headcount
+var ATTEND_STATE='loading';// 'loading' | 'ok' | 'unavailable'
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+  document.querySelectorAll('.view').forEach(function(x){x.classList.remove('active')});
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('view-'+t).classList.add('active');
+  if(t==='reports')renderReports();
+}
+
+function attendKey(date,startTime,room){return date+'|'+startTime+'|'+room}
+
+// Read attendance counts for reporting. Same endpoint index.html uses; stays
+// 'unavailable' (reports show every session as a gap) until Jeffrey adds it.
+function loadReports(){
+  fetch(ATTENDANCE_URL+'?action=getAttendance')
+  .then(function(r){return r.json()})
+  .then(function(rows){
+    if(!Array.isArray(rows))throw new Error('bad shape');
+    var map={};
+    rows.forEach(function(row){
+      if(!row||!row.date||!row.room)return;
+      var start=(row.time||'').split(' - ')[0].trim();
+      var c=parseInt(row.headcount);
+      if(!start||isNaN(c))return;
+      map[attendKey(row.date,start,row.room)]=c; // latest row wins
+    });
+    ATTEND=map;ATTEND_STATE='ok';
+  })
+  .catch(function(){ATTEND_STATE='unavailable'})
+  .then(function(){if(document.getElementById('view-reports').classList.contains('active'))renderReports()});
+}
+
+function shortDay(date){return getDow(date).substring(0,3)+' '+parseInt(date.split('-')[2])}
+
+function renderReports(){
+  var el=document.getElementById('report-content');
+  if(ATTEND_STATE==='loading'){el.innerHTML='<div class="loading"><div class="spinner"></div><p>Loading attendance…</p></div>';return}
+  var dayVal=document.getElementById('reportDayFilter').value;
+  var sessions=SESSIONS.filter(function(s){return !dayVal||s.date===dayVal});
+  var total=0,counted=0,gaps=[],byDay={},byRoom={},topList=[];
+  sessions.forEach(function(s){
+    var has=ATTEND[attendKey(s.date,s.startTime,s.room)]!==undefined;
+    var c=has?ATTEND[attendKey(s.date,s.startTime,s.room)]:0;
+    if(has){counted++;total+=c;topList.push({s:s,c:c})}else{gaps.push(s)}
+    if(!byDay[s.date])byDay[s.date]={dow:s.dow,total:0,counted:0,sessions:0};
+    byDay[s.date].sessions++;if(has){byDay[s.date].counted++;byDay[s.date].total+=c}
+    if(!byRoom[s.room])byRoom[s.room]={total:0,counted:0,sessions:0};
+    byRoom[s.room].sessions++;if(has){byRoom[s.room].counted++;byRoom[s.room].total+=c}
+  });
+  var totalSessions=sessions.length;
+  var pct=totalSessions?Math.round(counted/totalSessions*100):0;
+
+  var html='';
+  if(ATTEND_STATE==='unavailable')
+    html+='<div class="report-banner"><strong>Live counts aren’t wired up yet.</strong> Coverage below lists every session as “needs a count.” Add the <code>getAttendance</code> endpoint (see <code>update.md</code>) and re-deploy the Apps Script to light up real numbers.</div>';
+
+  html+='<div class="stat-row">';
+  html+='<div class="stat-tile"><div class="stat-num">'+total.toLocaleString()+'</div><div class="stat-label">Total counted</div></div>';
+  html+='<div class="stat-tile"><div class="stat-num">'+counted+'/'+totalSessions+'</div><div class="stat-label">Sessions in ('+pct+'%)</div></div>';
+  html+='<div class="stat-tile"><div class="stat-num">'+gaps.length+'</div><div class="stat-label">Still missing</div></div>';
+  html+='</div>';
+
+  html+='<div class="report-section"><h2>Sessions still needing a count</h2>';
+  if(!gaps.length){html+='<div class="all-covered">✅ All sessions counted</div>'}
+  else{
+    gaps.sort(function(a,b){if(a.date!==b.date)return a.date.localeCompare(b.date);return timeToMins(a.startTime)-timeToMins(b.startTime)});
+    gaps.forEach(function(s){html+='<div class="gap-item"><span class="gap-when">'+shortDay(s.date)+' '+s.startTime+'</span><span class="gap-room">'+s.room+'</span><span class="gap-mon">'+s.monitor+'</span></div>'});
+  }
+  html+='</div>';
+
+  html+='<div class="report-section"><h2>By day</h2><table class="rtable"><tr><th>Day</th><th class="num">Counted</th><th class="num">Total heads</th></tr>';
+  Object.keys(byDay).sort().forEach(function(d){var x=byDay[d];html+='<tr><td>'+x.dow+', July '+parseInt(d.split('-')[2])+'</td><td class="num">'+x.counted+'/'+x.sessions+'</td><td class="num">'+x.total.toLocaleString()+'</td></tr>'});
+  html+='</table></div>';
+
+  html+='<div class="report-section"><h2>By room</h2><table class="rtable"><tr><th>Room</th><th class="num">Counted</th><th class="num">Total heads</th></tr>';
+  Object.keys(byRoom).sort().forEach(function(r){var x=byRoom[r];html+='<tr><td>'+r+'</td><td class="num">'+x.counted+'/'+x.sessions+'</td><td class="num">'+x.total.toLocaleString()+'</td></tr>'});
+  html+='</table></div>';
+
+  if(topList.length){
+    topList.sort(function(a,b){return b.c-a.c});
+    html+='<div class="report-section"><h2>Top sessions by headcount</h2><table class="rtable"><tr><th>When</th><th>Room</th><th class="num">Heads</th></tr>';
+    topList.slice(0,10).forEach(function(t){html+='<tr><td>'+shortDay(t.s.date)+' '+t.s.startTime+'</td><td>'+t.s.room+'</td><td class="num">'+t.c+'</td></tr>'});
+    html+='</table></div>';
+  }
+  el.innerHTML=html;
+}
+
+function csvCell(v){v=String(v==null?'':v);if(/[",\r\n]/.test(v))v='"'+v.replace(/"/g,'""')+'"';return v}
+function exportCSV(){
+  var dayVal=document.getElementById('reportDayFilter').value;
+  var sessions=SESSIONS.filter(function(s){return !dayVal||s.date===dayVal}).slice().sort(function(a,b){if(a.date!==b.date)return a.date.localeCompare(b.date);return timeToMins(a.startTime)-timeToMins(b.startTime)});
+  if(!sessions.length){showToast('No sessions to export',true);return}
+  var rows=[['Date','Day','Start','End','Room','Monitor','Headcount']];
+  sessions.forEach(function(s){
+    var c=ATTEND[attendKey(s.date,s.startTime,s.room)];
+    rows.push([s.date,s.dow,s.startTime,s.endTime,s.room,s.monitor,(c!==undefined?c:'')]);
+  });
+  var csv=rows.map(function(r){return r.map(csvCell).join(',')}).join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='ptp-attendance'+(dayVal?'-'+dayVal:'')+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function showToast(msg,isError){
   var t=document.getElementById('toast');
@@ -174,6 +334,8 @@ Promise.all([
   document.getElementById('dayFilter').addEventListener('change',render);
   document.getElementById('monitorFilter').addEventListener('change',render);
   document.getElementById('roomFilter').addEventListener('change',render);
+  document.getElementById('reportDayFilter').addEventListener('change',renderReports);
+  loadReports();
 }).catch(function(err){
   document.getElementById('content').innerHTML='<div class="empty">Could not load data. Check your connection.</div>';
   showToast('Could not load sessions',true);
